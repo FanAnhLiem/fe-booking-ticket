@@ -34,3 +34,42 @@ export interface Movie {
   status: string;
   creatAt: string;
 }
+
+// Rạp chiếu
+export interface TypeCinema {
+  id: number;
+  name: string;
+  address: string;
+  status: string;      // 'ACTIVE' | 'INACTIVE' nếu muốn stricter
+  cinemaType?: string; // thêm field này để chứa tên loại rạp (2D, 3D, IMAX,...)
+}
+
+// Loại rạp (CinemaType)
+export interface TypeCinemaType {
+  id: number;
+  name: string;
+}
+
+// Tỉnh / Thành phố (API provinces.open-api.vn)
+export interface Province {
+  code: number;
+  name: string; // "Thành phố Hà Nội", "Tỉnh Bắc Ninh", ...
+}
+
+export interface CinemaSummary {
+  id: number;
+  name: string;
+}
+
+export interface ScreenRoomType {
+  id: number;
+  name: string;
+  priceFactor: number;
+}
+
+// Phòng chiếu (dùng detail response cho list)
+export interface ScreenRoomDetail {
+  id: number;
+  name: string;
+  roomType: string;
+}
