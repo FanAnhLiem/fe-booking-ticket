@@ -146,3 +146,22 @@ interface CinemaRevenue {
   totalTicket: number;
   totalRevenue: number;
 }
+
+export interface MovieDetail {
+  id: number;
+  name: string;
+  description: string;
+  duration: number;
+  category: string;
+  country: string;
+  director: string;
+  actors: string;
+  posterUrl: string;
+  ageLimit: number;
+  trailer: string;
+  status: boolean;
+  releaseDate: string;
+  endDate: string;
+  createAt: string;
+ 
+}

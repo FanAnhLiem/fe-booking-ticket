@@ -2,11 +2,53 @@
 
 import { navs } from '@/datas/nav-admin-data';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
+
+const BASE_API = 'http://localhost:8080/api';
+const LOGOUT_API = `${BASE_API}/auth/logout`;
 
 export function NavAdmin() {
-  const pathname = usePathname(); 
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('accessToken')
+          : null;
+
+      // Gửi request logout kèm Bearer token để BE blacklist JWT
+      if (token) {
+        const res = await fetch(LOGOUT_API, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        // cố gắng đọc body, nhưng không bắt buộc
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || (data && data.code !== 0)) {
+          console.error('Logout API error:', data);
+        }
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Dù BE trả sao thì FE cũng coi như đã đăng xuất:
+      // xoá token + điều hướng ra trang login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('accessToken');
+      }
+
+      toast.success('Đăng xuất thành công!');
+      router.push('/sign-in');
+    }
+  };
 
   return (
     <div className="flex flex-col w-[260px] h-full bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -25,33 +67,22 @@ export function NavAdmin() {
         <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
           Menu Chính
         </p>
-        <ul>
-          {navs.map((nav, index) => {
-            // Kiểm tra xem link này có đang active không
-            const isActive =
-              pathname === nav.url || pathname.startsWith(`${nav.url}/`);
+
+        <ul className="space-y-1">
+          {navs.map((nav) => {
+            const isActive = pathname === nav.url;
 
             return (
-              <li key={index}>
+              <li key={nav.url}>
                 <Link
                   href={nav.url}
-                  className={`
-                    group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm
-                    ${
-                      isActive
-                        ? 'bg-[#0c46d6] text-white shadow-md shadow-blue-200' // Style khi Active
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-[#0c46d6]' // Style bình thường
-                    }
-                  `}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-[#0c46d6] text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
                 >
-                  {/* Clone icon để đổi màu hoặc kích thước nếu cần */}
-                  <span
-                    className={`${
-                      isActive
-                        ? 'text-white'
-                        : 'text-gray-400 group-hover:text-[#0c46d6]'
-                    }`}
-                  >
+                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10">
                     {nav.icon}
                   </span>
                   <span>{nav.name}</span>
@@ -64,7 +95,11 @@ export function NavAdmin() {
 
       {/* --- FOOTER / LOGOUT --- */}
       <div className="p-4 border-t border-gray-100">
-        <button className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+        >
           <LogOut size={20} />
           <span>Đăng xuất</span>
         </button>
