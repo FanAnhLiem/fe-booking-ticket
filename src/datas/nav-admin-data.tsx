@@ -7,19 +7,29 @@ import {
   PartyPopper,
   ScreenShare,
   User,
-  MonitorPlay, // Icon mới cho loại phòng chiếu nhìn hợp hơn
-  Ticket,        // giá vé
-  Receipt, // Icon mới cho loại ghế
+  MonitorPlay, // Loại phòng chiếu
+  Ticket,      // Giá vé
+  Receipt,     // Đơn hàng
 } from 'lucide-react';
 
 // Set size mặc định cho icon
-const iconSize = 20; 
+const iconSize = 20;
 
 export const navs = [
   {
     name: 'Thống kê',
     url: '/admin/statistical',
     icon: <ChartNoAxesCombined size={iconSize} />,
+  },
+  {
+    name: 'Doanh thu theo phim',
+    url: '/admin/statistical/movie',
+    icon: <Film size={iconSize} />,
+  },
+  {
+    name: 'Doanh thu theo rạp',
+    url: '/admin/statistical/cinema',
+    icon: <Building size={iconSize} />,
   },
   {
     name: 'Quản lý phim',
@@ -64,7 +74,7 @@ export const navs = [
   {
     name: 'Quản lý ngày lễ',
     url: '/admin/holidays',
-    icon: <PartyPopper size={iconSize} />
+    icon: <PartyPopper size={iconSize} />,
   },
   {
     name: 'Quản lý User',

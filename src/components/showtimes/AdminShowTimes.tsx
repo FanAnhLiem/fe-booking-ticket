@@ -302,6 +302,7 @@ export default function AdminShowTimes() {
           id: sr.id,
           name: sr.name,
           roomType: sr.roomType,
+          status: sr.status,
         }));
         setScreenRooms(list);
       } else {

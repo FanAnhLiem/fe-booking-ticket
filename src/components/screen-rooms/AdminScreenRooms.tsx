@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Loader2,
   Search,
-  Filter,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -52,7 +50,7 @@ export default function AdminScreenRooms() {
   const [screenRoomTypes, setScreenRoomTypes] = useState<ScreenRoomType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(false);
 
-  // search + filter + paging cho phòng chiếu
+  // search + paging cho phòng chiếu
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -122,52 +120,50 @@ export default function AdminScreenRooms() {
     fetchScreenRoomTypes();
   }, []);
 
-  // ====== FETCH CINEMA THEO TỈNH/THÀNH (GET /cinema/address) ======
   // ====== FETCH CINEMA THEO TỈNH/THÀNH (POST /cinema/address với body {address}) ======
-const fetchCinemasByProvince = async (provinceName: string) => {
-  if (!provinceName) {
-    setCinemas([]);
+  const fetchCinemasByProvince = async (provinceName: string) => {
+    if (!provinceName) {
+      setCinemas([]);
+      setSelectedCinemaId('');
+      setScreenRooms([]);
+      return;
+    }
+
+    setLoadingCinemas(true);
     setSelectedCinemaId('');
     setScreenRooms([]);
-    return;
-  }
 
-  setLoadingCinemas(true);
-  setSelectedCinemaId('');
-  setScreenRooms([]);
+    try {
+      const res = await fetch(CINEMA_BY_ADDRESS_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Nếu endpoint yêu cầu token thì thêm:
+          // ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ address: provinceName }),
+      });
 
-  try {
-    const res = await fetch(CINEMA_BY_ADDRESS_API, {
-      method: 'POST', // 🔴 ĐỔI THÀNH POST
-      headers: {
-        'Content-Type': 'application/json',
-        // nếu endpoint cần token thì thêm:
-        // ...getAuthHeaders(),
-      },
-      // BE dùng @RequestBody AddressRequest {address}
-      body: JSON.stringify({ address: provinceName }),
-    });
+      const data = await res.json();
+      console.log('cinemas by address:', data);
 
-    const data = await res.json();
-    console.log('cinemas by address:', data); // để debug xem BE trả gì
-
-    if (res.ok && data.code === 0 && Array.isArray(data.result)) {
-      const mapped: CinemaSummary[] = data.result.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-      }));
-      setCinemas(mapped);
-    } else {
-      console.error('Fetch cinemas by address wrong data:', data);
+      if (res.ok && data.code === 0 && Array.isArray(data.result)) {
+        const mapped: CinemaSummary[] = data.result.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+        }));
+        setCinemas(mapped);
+      } else {
+        console.error('Fetch cinemas by address wrong data:', data);
+        setCinemas([]);
+      }
+    } catch (error) {
+      console.error('Fetch cinemas by address failed:', error);
       setCinemas([]);
+    } finally {
+      setLoadingCinemas(false);
     }
-  } catch (error) {
-    console.error('Fetch cinemas by address failed:', error);
-    setCinemas([]);
-  } finally {
-    setLoadingCinemas(false);
-  }
-};
+  };
 
   // Khi chọn tỉnh -> gọi API lấy rạp
   const handleProvinceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -195,6 +191,7 @@ const fetchCinemasByProvince = async (provinceName: string) => {
           id: r.id,
           name: r.name,
           roomType: r.roomType,
+          status: r.status, // ✅ LẤY THÊM STATUS TỪ BACKEND
         }));
         setScreenRooms(mapped);
         setCurrentPage(1);
@@ -225,11 +222,16 @@ const fetchCinemasByProvince = async (provinceName: string) => {
   // ====== FILTER + PAGINATION ======
   const filteredRooms = useMemo(() => {
     const lower = searchTerm.toLowerCase();
-    return screenRooms.filter(
-      (r) =>
-        r.name.toLowerCase().includes(lower) ||
-        r.roomType.toLowerCase().includes(lower),
-    );
+    return screenRooms.filter((r) => {
+      const n = r.name.toLowerCase();
+      const t = r.roomType.toLowerCase();
+      const s = (r.status || '').toLowerCase();
+      return (
+        n.includes(lower) ||
+        t.includes(lower) ||
+        s.includes(lower)
+      );
+    });
   }, [screenRooms, searchTerm]);
 
   const totalPages = Math.max(
@@ -454,7 +456,7 @@ const fetchCinemasByProvince = async (provinceName: string) => {
                 <Search size={18} className="text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Tìm theo tên hoặc loại phòng..."
+                  placeholder="Tìm theo tên / loại / trạng thái..."
                   className="w-full outline-none text-sm"
                   value={searchTerm}
                   onChange={handleSearchChange}
@@ -501,6 +503,9 @@ const fetchCinemasByProvince = async (provinceName: string) => {
                 <th className="px-4 py-2 text-left font-medium text-xs text-slate-500">
                   Loại phòng
                 </th>
+                <th className="px-4 py-2 text-left font-medium text-xs text-slate-500">
+                  Trạng thái
+                </th>
                 <th className="px-4 py-2 text-right font-medium text-xs text-slate-500">
                   Hành động
                 </th>
@@ -510,7 +515,7 @@ const fetchCinemasByProvince = async (provinceName: string) => {
               {!selectedCinemaId ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="px-4 py-6 text-center text-sm text-slate-500"
                   >
                     Vui lòng chọn tỉnh/thành và rạp để xem phòng chiếu.
@@ -519,7 +524,7 @@ const fetchCinemasByProvince = async (provinceName: string) => {
               ) : currentRooms.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="px-4 py-6 text-center text-sm text-slate-500"
                   >
                     Không có phòng chiếu nào.
@@ -539,6 +544,17 @@ const fetchCinemasByProvince = async (provinceName: string) => {
                     </td>
                     <td className="px-4 py-2 text-slate-700">
                       {room.roomType}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs border ${
+                          room.status === 'Đang hoạt động'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            : 'bg-amber-50 text-amber-700 border-amber-100'
+                        }`}
+                      >
+                        {room.status}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-2">

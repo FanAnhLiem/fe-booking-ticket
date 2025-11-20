@@ -72,6 +72,7 @@ export interface ScreenRoomDetail {
   id: number;
   name: string;
   roomType: string;
+  status: string;
 }
 
 export interface MovieShowDay {
@@ -96,4 +97,52 @@ export interface ShowTimeResponse {
   screenRoomId: number;
   movieId: number;
   movieName?: string;
+}
+
+export interface TicketPrice {
+  id: number;
+  timeFrame: string;      // "Morning" | "Noon" | "Afternoon" | "Evening"
+  dayType: string;        // "Ngày lễ, cuối tuần" | "Ngày thường" (BE trả sẵn)
+  cinemaType: string;     // tên loại rạp
+  screenRoomType: string; // tên loại phòng chiếu
+  seatType: string;       // tên loại ghế
+  price: number;          // BigDecimal từ BE convert sang number
+}
+
+export interface SeatType {
+  id: number;
+  name: string;
+  priceFactor: number;
+}
+
+ export interface TypeCinemaType {
+  id: number;
+  name: string;
+}
+
+type TabKey = 'overview' | 'movie' | 'cinema';
+
+interface RevenueDashboard {
+  todayTicket: number;
+  todayRevenue: number;
+  monthRevenue: number;
+  monthTicket: number;
+}
+
+interface StatisticSummary {
+  month: number;       // 1..12
+  monthTicket: number;
+  monthRevenue: number;
+}
+
+interface MovieRevenue {
+  movieName: string;
+  totalTicket: number;
+  totalRevenue: number;
+}
+
+interface CinemaRevenue {
+  cinemaName: string;
+  totalTicket: number;
+  totalRevenue: number;
 }
