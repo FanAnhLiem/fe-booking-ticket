@@ -8,7 +8,8 @@ import {
   ScreenShare,
   User,
   MonitorPlay, // Icon mới cho loại phòng chiếu nhìn hợp hơn
-  Sofa, // Icon mới cho loại ghế
+  Ticket,        // giá vé
+  Receipt, // Icon mới cho loại ghế
 } from 'lucide-react';
 
 // Set size mặc định cho icon
@@ -46,14 +47,19 @@ export const navs = [
     icon: <Armchair size={iconSize} />,
   },
   {
-    name: 'Loại ghế',
-    url: '/admin/seats-types',
-    icon: <Sofa size={iconSize} />,
-  },
-  {
     name: 'Quản lý suất chiếu',
     url: '/admin/showtimes',
     icon: <CalendarDays size={iconSize} />,
+  },
+  {
+    name: 'Quản lý giá vé',
+    url: '/admin/ticket-prices',
+    icon: <Ticket size={iconSize} />,
+  },
+  {
+    name: 'Quản lý đơn hàng',
+    url: '/admin/orders',
+    icon: <Receipt size={iconSize} />,
   },
   {
     name: 'Quản lý ngày lễ',

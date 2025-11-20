@@ -73,3 +73,27 @@ export interface ScreenRoomDetail {
   name: string;
   roomType: string;
 }
+
+export interface MovieShowDay {
+  id: number;
+  name: string;
+}
+
+export interface ShowTimeDTO {
+  id: number;
+  movieName: string;
+  showDate: string;
+  startTime: string;
+  endTime: string;
+  screenRoomId: number;
+}
+
+export interface ShowTimeResponse {
+  id: number;
+  showDate: string;
+  startTime: string;
+  endTime: string;
+  screenRoomId: number;
+  movieId: number;
+  movieName?: string;
+}
