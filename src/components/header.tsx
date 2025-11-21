@@ -109,7 +109,7 @@ export default function Header() {
           </div>
           <div className="flex flex-col">
             <span className="text-xl font-extrabold text-gray-900 tracking-tight leading-none group-hover:text-blue-600 transition-colors">
-              CINE<span className="text-blue-600">TICKET</span>
+              PHENIKAA<span className="text-blue-600"> CINEMA</span>
             </span>
             <span className="text-xs text-gray-500">Đặt vé xem phim online</span>
           </div>

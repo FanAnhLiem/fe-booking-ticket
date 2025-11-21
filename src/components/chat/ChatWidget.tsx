@@ -666,9 +666,9 @@ const ChatWidget = () => {
               CB
             </div>
             <div className="flex-1">
-              <div className="font-semibold text-[15px]">Cinema Assistant</div>
+              <div className="font-semibold text-[15px]">PHENIKAA CINE BOT</div>
               <div className="text-[12px] text-blue-100">
-                Hỗ trợ đặt vé &amp; thông tin rạp
+                Hỗ trợ đặt vé &amp; tìm kiếm thông tin theo yêu cầu
               </div>
             </div>
             <button

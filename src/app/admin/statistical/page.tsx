@@ -2,10 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+} from 'recharts';
 
 const BASE_API = 'http://localhost:8080/api';
 const REVENUE_ADMIN_API = `${BASE_API}/admin/revenue`;
 
+// Lấy token cho admin
 const getAuthHeaders = (): Record<string, string> => {
   if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('accessToken');
@@ -31,65 +44,6 @@ const formatCurrency = (value: number): string =>
 
 const formatNumber = (value: number): string =>
   value.toLocaleString('vi-VN');
-
-interface SimpleBarChartProps<T> {
-  title: string;
-  data: T[];
-  getLabel: (item: T) => string;
-  getValue: (item: T) => number;
-  valueFormatter?: (val: number) => string;
-}
-
-function SimpleBarChart<T>({
-  title,
-  data,
-  getLabel,
-  getValue,
-  valueFormatter = (v) => v.toString(),
-}: SimpleBarChartProps<T>) {
-  const values = data.map((d) => getValue(d));
-  const maxValue = values.length ? Math.max(...values) : 0;
-  const safeMax = maxValue > 0 ? maxValue : 1;
-
-  return (
-    <div className="bg-white rounded-xl border shadow-sm p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-sm text-slate-800">{title}</h3>
-      </div>
-      {data.length === 0 ? (
-        <p className="text-xs text-slate-500">Chưa có dữ liệu.</p>
-      ) : (
-        <div className="flex-1 flex flex-col justify-end">
-          <div className="flex items-end gap-3 h-56">
-            {data.map((item, idx) => {
-              const v = getValue(item);
-              const heightPercent = (v / safeMax) * 100;
-              return (
-                <div
-                  key={idx}
-                  className="flex flex-col items-center flex-1 min-w-[30px]"
-                >
-                  <div className="text-[10px] text-slate-500 mb-1 truncate max-w-[60px]">
-                    {valueFormatter(v)}
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-40 flex items-end overflow-hidden">
-                    <div
-                      className="w-full bg-[#0c46d6] rounded-full transition-all"
-                      style={{ height: `${heightPercent}%` }}
-                    />
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-600">
-                    {getLabel(item)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function StatisticalOverviewPage() {
   const [dashboard, setDashboard] = useState<RevenueDashboard | null>(null);
@@ -124,7 +78,7 @@ export default function StatisticalOverviewPage() {
       const statsData = await resStats.json().catch(() => null);
       if (resStats.ok && Array.isArray(statsData?.result)) {
         const list: StatisticSummary[] = statsData.result.map((s: any) => ({
-          month: s.month,
+          month: Number(s.month ?? 0),
           monthTicket: Number(s.monthTicket ?? 0),
           monthRevenue: Number(s.monthRevenue ?? 0),
         }));
@@ -143,13 +97,58 @@ export default function StatisticalOverviewPage() {
     fetchOverview();
   }, []);
 
-  const sortedMonthStats = useMemo(
-    () => [...monthStats].sort((a, b) => a.month - b.month),
-    [monthStats],
-  );
+  /**
+   * chartData: luôn có đủ từ tháng 1 -> tháng lớn nhất trong dữ liệu.
+   * Tháng nào không có dữ liệu thì revenue = 0, tickets = 0.
+   */
+  const chartData = useMemo(() => {
+    if (!monthStats.length) return [];
+
+    const maxMonth = Math.max(
+      ...monthStats.map((m) => (m.month ? Number(m.month) : 0)),
+    );
+
+    const byMonth = new Map<number, StatisticSummary>();
+    monthStats.forEach((m) => {
+      if (m.month) byMonth.set(Number(m.month), m);
+    });
+
+    const filled: { monthLabel: string; revenue: number; tickets: number }[] =
+      [];
+
+    for (let m = 1; m <= maxMonth; m += 1) {
+      const stat = byMonth.get(m);
+      filled.push({
+        monthLabel: `Th ${m}`,
+        revenue: stat ? stat.monthRevenue : 0,
+        tickets: stat ? stat.monthTicket : 0,
+      });
+    }
+
+    return filled;
+  }, [monthStats]);
 
   return (
     <div className="w-full max-w-6xl mx-auto mt-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-800">
+            Thống kê doanh thu
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Tổng quan doanh thu và số vé theo ngày / theo tháng.
+          </p>
+        </div>
+        <button
+          onClick={fetchOverview}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg text-xs bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"
+        >
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
+      </div>
+
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border shadow-sm p-4">
@@ -158,12 +157,14 @@ export default function StatisticalOverviewPage() {
             {dashboard ? formatNumber(dashboard.todayTicket) : 0}
           </p>
         </div>
+
         <div className="bg-white rounded-xl border shadow-sm p-4">
           <p className="text-xs text-slate-500 mb-1">Doanh thu hôm nay</p>
           <p className="text-lg font-semibold text-slate-900">
             {dashboard ? formatCurrency(dashboard.todayRevenue) : '0 đ'}
           </p>
         </div>
+
         <div className="bg-white rounded-xl border shadow-sm p-4">
           <p className="text-xs text-slate-500 mb-1">
             Doanh thu tháng hiện tại
@@ -172,10 +173,9 @@ export default function StatisticalOverviewPage() {
             {dashboard ? formatCurrency(dashboard.monthRevenue) : '0 đ'}
           </p>
         </div>
+
         <div className="bg-white rounded-xl border shadow-sm p-4">
-          <p className="text-xs text-slate-500 mb-1">
-            Số vé tháng hiện tại
-          </p>
+          <p className="text-xs text-slate-500 mb-1">Vé tháng hiện tại</p>
           <p className="text-2xl font-semibold text-slate-900">
             {dashboard ? formatNumber(dashboard.monthTicket) : 0}
           </p>
@@ -189,22 +189,65 @@ export default function StatisticalOverviewPage() {
         </div>
       )}
 
-      {/* Charts */}
+      {/* Charts: line + bar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SimpleBarChart<StatisticSummary>
-          title="Doanh thu theo tháng"
-          data={sortedMonthStats}
-          getLabel={(m) => `Th ${m.month}`}
-          getValue={(m) => m.monthRevenue}
-          valueFormatter={(v) => formatCurrency(v)}
-        />
-        <SimpleBarChart<StatisticSummary>
-          title="Số vé theo tháng"
-          data={sortedMonthStats}
-          getLabel={(m) => `Th ${m.month}`}
-          getValue={(m) => m.monthTicket}
-          valueFormatter={(v) => formatNumber(v)}
-        />
+        {/* Line chart doanh thu theo tháng */}
+        <div className="bg-white rounded-xl border shadow-sm p-4">
+          <h3 className="text-sm font-semibold text-slate-800 text-center mb-2">
+            Doanh thu theo tháng
+          </h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="monthLabel" />
+              <YAxis tickFormatter={(v) => v.toLocaleString('vi-VN')} />
+              <Tooltip
+                formatter={(v: any) => formatCurrency(Number(v))}
+                labelFormatter={(label) => `Tháng: ${label}`}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                name="Doanh thu"
+                stroke="#ff6384"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Bar chart số vé theo tháng */}
+        <div className="bg-white rounded-xl border shadow-sm p-4">
+          <h3 className="text-sm font-semibold text-slate-800 text-center mb-2">
+            Số vé bán theo tháng
+          </h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart
+              data={chartData}
+              margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="monthLabel" />
+              <YAxis tickFormatter={(v) => v.toLocaleString('vi-VN')} />
+              <Tooltip
+                formatter={(v: any) => formatNumber(Number(v))}
+                labelFormatter={(label) => `Tháng: ${label}`}
+              />
+              <Legend />
+              <Bar
+                dataKey="tickets"
+                name="Số vé bán ra"
+                fill="#36a2eb"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
