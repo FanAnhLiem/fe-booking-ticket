@@ -1,18 +1,15 @@
-import Header from "@/components/header";
+// src/app/(pages)/layout.tsx
+import type { ReactNode } from 'react';
+import Header from '@/components/header';
+import ChatWidget from '@/components/chat/ChatWidget';  // 👈 đúng path file bạn đang có
 
-// app/layout.tsx
-export const metadata = {
-  title: 'My App',
-  description: 'Description',
-};
-
-export default function PageLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <div>
-    <Header></Header>
-    {children}
-    </div>;
+export default function PageLayout({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <Header />
+      {children}
+      {/* Nút + hộp chat nổi ở góc dưới bên phải */}
+      <ChatWidget />
+    </>
+  );
 }

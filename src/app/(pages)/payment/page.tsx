@@ -34,14 +34,6 @@ interface SeatShowTime {
   seatList: SeatShowTimeSeat[];
 }
 
-// ===== Helper lấy token =====
-const getAuthHeaders = (): Record<string, string> => {
-  if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('accessToken');
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-};
-
 const formatCurrency = (n: number) =>
   n.toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' đ';
 
@@ -58,6 +50,13 @@ const formatShowDate = (raw: string | null | undefined) => {
 const formatShowTime = (raw: string | null | undefined) => {
   if (!raw) return '';
   return raw.slice(0, 5);
+};
+
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('accessToken');
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
 };
 
 export default function PaymentPage() {
@@ -90,7 +89,7 @@ export default function PaymentPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
 
-  // ===== Fetch info showtime để hiển thị =====
+  // Fetch lại info showtime/seat
   useEffect(() => {
     if (!showTimeId) return;
 
@@ -102,18 +101,43 @@ export default function PaymentPage() {
         const res = await fetch(`${SEAT_SHOWTIME_API}/${showTimeId}`, {
           cache: 'no-store',
         });
-        const dataRes: ApiResponse<SeatShowTime> = await res.json();
+
+        const raw = await res.text();
 
         if (!res.ok) {
+          let msg = '';
+          try {
+            if (raw) {
+              const errJson = JSON.parse(raw) as ApiResponse<unknown>;
+              msg = errJson.message || '';
+            }
+          } catch {
+            // ignore
+          }
           throw new Error(
-            dataRes.message || 'Không thể tải thông tin suất chiếu.',
+            msg || raw || 'Không thể tải thông tin suất chiếu.',
           );
         }
+
+        if (!raw) {
+          throw new Error('API /seat trả về rỗng, không có dữ liệu.');
+        }
+
+        let dataRes: ApiResponse<SeatShowTime>;
+        try {
+          dataRes = JSON.parse(raw) as ApiResponse<SeatShowTime>;
+        } catch (e) {
+          console.error('Dữ liệu /seat không phải JSON hợp lệ:', raw);
+          throw new Error('Dữ liệu trả về không phải JSON hợp lệ.');
+        }
+
         if (!cancelled) setSeatData(dataRes.result || null);
       } catch (err: any) {
         if (!cancelled) {
           console.error('Fetch seat/showtime error:', err);
-          setError(err.message || 'Có lỗi xảy ra khi tải thông tin suất chiếu.');
+          setError(
+            err.message || 'Có lỗi xảy ra khi tải thông tin suất chiếu.',
+          );
         }
       } finally {
         if (!cancelled) setLoadingSeat(false);
@@ -154,14 +178,13 @@ export default function PaymentPage() {
 
     try {
       setLoadingPay(true);
-      const authHeaders = getAuthHeaders();
 
-      // 1. Gọi VNPay createPayment
+      // 1. Tạo giao dịch VNPay
       const payRes = await fetch(VNPAY_PAYMENT_API, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...authHeaders,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           amount: Math.round(displayAmount),
@@ -169,12 +192,25 @@ export default function PaymentPage() {
         }),
       });
 
-      const payData: ApiResponse<{ status: string; paymentUrl: string }> =
-        await payRes.json();
+      const payRaw = await payRes.text();
+      let payData: ApiResponse<{ status: string; paymentUrl: string }> | null =
+        null;
+      try {
+        if (payRaw) {
+          payData = JSON.parse(
+            payRaw,
+          ) as ApiResponse<{ status: string; paymentUrl: string }>;
+        }
+      } catch {
+        // ignore
+      }
 
-      if (!payRes.ok || !payData.result?.paymentUrl) {
+      if (!payRes.ok || !payData?.result?.paymentUrl) {
+        let msg = '';
+        if (payData?.message) msg = payData.message;
+
         throw new Error(
-          payData.message || 'Không tạo được giao dịch thanh toán VNPay.',
+          msg || payRaw || 'Không tạo được giao dịch thanh toán VNPay.',
         );
       }
 
@@ -192,41 +228,31 @@ export default function PaymentPage() {
         console.warn('Không parse được paymentUrl:', e);
       }
 
-      if (!vnp_TxnRef || !vnp_Amount) {
-        throw new Error(
-          'Không lấy được mã giao dịch từ VNPay (vnp_TxnRef / vnp_Amount).',
-        );
+      // 3. Gọi createInvoice trước khi redirect
+      try {
+        await fetch(INVOICE_API, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            showtime_id: Number(showTimeId),
+            listSeatId: seatIdNumbers,
+            vnp_TxnRef,
+            vnp_Amount,
+          }),
+        });
+      } catch (e) {
+        console.error('Create invoice error (vẫn redirect VNPay):', e);
       }
 
-      // 3. Gọi createInvoice TRƯỚC khi redirect VNPay
-      const invoiceRes = await fetch(INVOICE_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-        },
-        body: JSON.stringify({
-          showtime_id: Number(showTimeId),
-          listSeatId: seatIdNumbers,
-          vnp_TxnRef,
-          vnp_Amount,
-        }),
-      });
-
-      if (!invoiceRes.ok) {
-        const invoiceText = await invoiceRes.text();
-        throw new Error(
-          invoiceText || 'Không tạo được hóa đơn. Vui lòng thử lại.',
-        );
-      }
-
-      // 4. Nếu mọi thứ ok -> redirect tới VNPay
+      // 4. Redirect sang VNPay
       window.location.href = paymentUrl;
     } catch (err: any) {
       console.error('Thanh toán VNPay lỗi:', err);
       setPayError(
-        err.message ||
-          'Có lỗi xảy ra khi tạo giao dịch VNPay / hóa đơn. Vui lòng thử lại.',
+        err.message || 'Có lỗi xảy ra khi tạo giao dịch VNPay. Vui lòng thử lại.',
       );
     } finally {
       setLoadingPay(false);
@@ -235,56 +261,56 @@ export default function PaymentPage() {
 
   // ===== UI =====
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-50 pb-10">
+    <main className="min-h-screen bg-slate-50 pb-10">
       <div className="container mx-auto px-4 py-6 md:py-10 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT – Thông tin phim & thanh toán */}
         <div className="lg:col-span-2 space-y-6">
           {/* Thông tin phim */}
-          <section className="bg-slate-800/80 rounded-3xl border border-slate-700 px-5 py-4 md:px-7 md:py-6">
-            <h2 className="text-xl md:text-2xl font-semibold mb-4">
+          <section className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 py-4 md:px-7 md:py-6">
+            <h2 className="text-xl md:text-2xl font-semibold mb-4 text-gray-900">
               Thông tin phim
             </h2>
 
             {loadingSeat ? (
-              <p className="text-sm md:text-base text-slate-300">
+              <p className="text-sm md:text-base text-gray-500">
                 Đang tải thông tin suất chiếu...
               </p>
             ) : !seatData ? (
-              <p className="text-sm md:text-base text-red-300">
+              <p className="text-sm md:text-base text-red-500">
                 Không tìm thấy thông tin suất chiếu. Hãy quay lại chọn ghế.
               </p>
             ) : (
-              <div className="grid grid-cols-2 gap-y-3 text-sm md:text-base">
+              <div className="grid grid-cols-2 gap-y-3 text-sm md:text-base text-gray-800">
                 <div className="space-y-2">
-                  <p className="text-slate-400">Phim</p>
+                  <p className="text-gray-500">Phim</p>
                   <p className="font-semibold text-base md:text-lg">
                     {seatData.movieName}
                   </p>
 
-                  <p className="text-slate-400 mt-3">Ngày giờ chiếu</p>
+                  <p className="text-gray-500 mt-3">Ngày giờ chiếu</p>
                   <p className="font-medium">
-                    <span className="text-amber-400">
+                    <span className="text-amber-500">
                       {formatShowTime(seatData.showTime)}
                     </span>{' '}
                     - {formatShowDate(seatData.showDate)}
                   </p>
 
-                  <p className="text-slate-400 mt-3">Định dạng</p>
+                  <p className="text-gray-500 mt-3">Định dạng</p>
                   <p className="font-medium">2D</p>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-slate-400">Rạp</p>
+                  <p className="text-gray-500">Rạp</p>
                   <p className="font-medium">{seatData.cinemaName}</p>
 
-                  <p className="text-slate-400 mt-3">Ghế</p>
+                  <p className="text-gray-500 mt-3">Ghế</p>
                   <p className="font-medium">
                     {selectedSeats.length > 0
                       ? selectedSeats.map((s) => s.seatCode).join(', ')
                       : 'Chưa chọn ghế'}
                   </p>
 
-                  <p className="text-slate-400 mt-3">Phòng chiếu</p>
+                  <p className="text-gray-500 mt-3">Phòng chiếu</p>
                   <p className="font-medium">{seatData.screenRoomName}</p>
                 </div>
               </div>
@@ -292,18 +318,18 @@ export default function PaymentPage() {
           </section>
 
           {/* Thông tin thanh toán */}
-          <section className="bg-slate-800/80 rounded-3xl border border-slate-700 px-5 py-4 md:px-7 md:py-6">
-            <h2 className="text-xl md:text-2xl font-semibold mb-4">
+          <section className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 py-4 md:px-7 md:py-6">
+            <h2 className="text-xl md:text-2xl font-semibold mb-4 text-gray-900">
               Thông tin thanh toán
             </h2>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-700">
-              <div className="grid grid-cols-3 bg-slate-900/70 text-xs md:text-sm text-slate-400 px-4 py-2">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-slate-50/60">
+              <div className="grid grid-cols-3 bg-slate-100 text-xs md:text-sm text-gray-600 px-4 py-2">
                 <div>Danh mục</div>
                 <div>Số lượng</div>
                 <div className="text-right">Tổng tiền</div>
               </div>
-              <div className="grid grid-cols-3 px-4 py-3 text-sm md:text-base">
+              <div className="grid grid-cols-3 px-4 py-3 text-sm md:text-base text-gray-800">
                 <div>
                   Ghế{' '}
                   {selectedSeats.length > 0
@@ -321,39 +347,41 @@ export default function PaymentPage() {
 
         {/* RIGHT – Phương thức thanh toán */}
         <div className="space-y-6">
-          <section className="bg-slate-800/80 rounded-3xl border border-slate-700 px-5 py-4 md:px-7 md:py-6">
-            <h2 className="text-xl md:text-2xl font-semibold mb-4">
+          <section className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 py-4 md:px-7 md:py-6">
+            <h2 className="text-xl md:text-2xl font-semibold mb-4 text-gray-900">
               Phương thức thanh toán
             </h2>
 
+            {/* VNPay là phương thức duy nhất – active */}
             <button
               type="button"
-              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-rose-500 bg-slate-900/60 mb-3"
+              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-rose-400 bg-rose-50"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-rose-500 flex items-center justify-center text-xs font-bold">
+                <div className="w-9 h-9 rounded-full bg-rose-500 flex items-center justify-center text-xs font-bold text-white">
                   V
                 </div>
                 <div className="flex flex-col items-start">
-                  <span className="text-sm md:text-base font-semibold">
+                  <span className="text-sm md:text-base font-semibold text-gray-900">
                     VNPay (VietQR)
                   </span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-gray-500">
                     Thanh toán QR / Internet Banking
                   </span>
                 </div>
               </div>
-              <span className="text-xs md:text-sm text-rose-300 font-medium">
+              <span className="text-xs md:text-sm text-rose-500 font-medium">
                 Đang chọn
               </span>
             </button>
 
-            <div className="mt-5 border-t border-slate-700 pt-4 space-y-3 text-sm md:text-base">
+            {/* Tổng tiền */}
+            <div className="mt-5 border-t border-gray-200 pt-4 space-y-3 text-sm md:text-base text-gray-800">
               <div className="flex justify-between">
                 <span>Thanh toán</span>
                 <span>{formatCurrency(displayAmount)}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-gray-500">
                 <span>Phí</span>
                 <span>0 đ</span>
               </div>
@@ -363,7 +391,7 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex items-start gap-2 text-xs md:text-sm text-slate-300">
+            <div className="mt-4 flex items-start gap-2 text-xs md:text-sm text-gray-700">
               <input
                 id="agree"
                 type="checkbox"
@@ -381,7 +409,7 @@ export default function PaymentPage() {
             </div>
 
             {payError && (
-              <p className="mt-3 text-xs md:text-sm text-red-400">{payError}</p>
+              <p className="mt-3 text-xs md:text-sm text-red-500">{payError}</p>
             )}
 
             <button
@@ -390,7 +418,7 @@ export default function PaymentPage() {
               disabled={loadingPay || !seatData || selectedSeats.length === 0}
               className={`mt-5 w-full py-3 rounded-full text-sm md:text-base font-semibold transition-all ${
                 loadingPay || !seatData || selectedSeats.length === 0
-                  ? 'bg-slate-600 text-slate-300 cursor-not-allowed'
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                   : 'bg-rose-600 text-white hover:bg-rose-700 shadow-md'
               }`}
             >
@@ -399,7 +427,7 @@ export default function PaymentPage() {
 
             <button
               type="button"
-              className="mt-3 w-full py-2 rounded-full text-xs md:text-sm border border-slate-600 text-slate-200 hover:bg-slate-700"
+              className="mt-3 w-full py-2 rounded-full text-xs md:text-sm border border-gray-300 text-gray-700 hover:bg-gray-100"
             >
               <Link href="/cinemas">Quay lại</Link>
             </button>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 const BASE_API = 'http://localhost:8080/api';
 const SEAT_SHOWTIME_API = `${BASE_API}/seat`;
-const LOGIN_PAGE = '/login'; // 👈 đường dẫn trang đăng nhập
+const LOGIN_PAGE = '/sign-in'; // ✅ đúng route đăng nhập trong FE
 
 interface ApiResponse<T> {
   code?: number;
@@ -61,10 +61,10 @@ const formatShowTime = (raw: string | null | undefined) => {
   return raw.slice(0, 5); // HH:mm:ss -> HH:mm
 };
 
-// lấy token đăng nhập (JWT) trên client
+// Lấy token đăng nhập (JWT) trên client
 const getAccessToken = () => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('accessToken'); // 👈 đúng key bạn đang dùng
+  return localStorage.getItem('accessToken'); // ✅ đúng key FE đang dùng ở sign-in
 };
 
 export default function SeatBookingPage({ showTimeId }: { showTimeId: string }) {
@@ -256,15 +256,8 @@ export default function SeatBookingPage({ showTimeId }: { showTimeId: string }) 
     // 1. Kiểm tra đăng nhập
     const token = getAccessToken();
     if (!token) {
-      // URL hiện tại (để login xong quay lại)
-      const currentPath =
-        typeof window !== 'undefined'
-          ? window.location.pathname + window.location.search
-          : `/booking-seat/${data.showTimeId}`;
-
-      router.push(
-        `${LOGIN_PAGE}?redirect=${encodeURIComponent(currentPath)}`,
-      );
+      // Chưa login → chuyển sang trang đăng nhập
+      router.push(LOGIN_PAGE);
       return;
     }
 

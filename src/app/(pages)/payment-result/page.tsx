@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { CheckCircle2, XCircle } from 'lucide-react';
 
 const BASE_API = 'http://localhost:8080/api';
 const VNPAY_RETURN_API = `${BASE_API}/vnpay/return`;
@@ -13,68 +14,71 @@ interface ApiResponse<T> {
   result?: T;
 }
 
+type Status = 'loading' | 'success' | 'fail';
+
+const getAccessToken = () => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('accessToken');
+};
+
 export default function PaymentResultPage() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<'pending' | 'success' | 'fail'>('pending');
-  const [message, setMessage] = useState<string>('Đang xử lý kết quả thanh toán...');
+  const [status, setStatus] = useState<Status>('loading');
+  const [message, setMessage] = useState<string>('');
+  const [txnRef, setTxnRef] = useState<string>('');
 
   useEffect(() => {
-    const responseCode = searchParams.get('vnp_ResponseCode') ?? '';
-    const txnRef = searchParams.get('vnp_TxnRef') ?? '';
+    const responseCode = searchParams.get('vnp_ResponseCode');
+    const vnpTxnRef = searchParams.get('vnp_TxnRef');
 
-    // Nếu thiếu param => fail luôn
-    if (!responseCode || !txnRef) {
+    if (!responseCode || !vnpTxnRef) {
       setStatus('fail');
-      setMessage('Thiếu thông tin từ VNPay. Vui lòng kiểm tra lại.');
+      setMessage('Thiếu thông tin thanh toán từ VNPay.');
       return;
     }
 
+    setTxnRef(vnpTxnRef);
+
     const callBackend = async () => {
       try {
-        // nếu API /vnpay/return yêu cầu token thì đọc token ở đây
-        const token = typeof window !== 'undefined'
-          ? localStorage.getItem('accessToken')
-          : null;
+        const token = getAccessToken();
+        const url = `${VNPAY_RETURN_API}?vnp_ResponseCode=${encodeURIComponent(
+          responseCode,
+        )}&vnp_TxnRef=${encodeURIComponent(vnpTxnRef)}`;
 
-        const res = await fetch(
-          `${VNPAY_RETURN_API}?vnp_ResponseCode=${encodeURIComponent(
-            responseCode,
-          )}&vnp_TxnRef=${encodeURIComponent(txnRef)}`,
-          {
-            headers: token
-              ? { Authorization: `Bearer ${token}` }
-              : undefined,
-          },
-        );
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
 
-        let text = await res.text();
+        const raw = await res.text();
         let data: ApiResponse<string> | null = null;
         try {
-          data = text ? (JSON.parse(text) as ApiResponse<string>) : null;
+          if (raw) data = JSON.parse(raw) as ApiResponse<string>;
         } catch {
-          // BE trả plain text thì dùng luôn
+          // ignore
         }
+
+        const backendMsg =
+          data?.message || data?.result || 'Hệ thống đã xử lý kết quả thanh toán.';
 
         if (!res.ok) {
           setStatus('fail');
-          setMessage(data?.message || text || 'Thanh toán không thành công.');
+          setMessage(backendMsg);
           return;
         }
 
-        // Theo VNPay: 00 = thành công
         if (responseCode === '00') {
           setStatus('success');
           setMessage(
-            data?.result ||
-              data?.message ||
-              'Thanh toán thành công. Vé của bạn đã được ghi nhận.',
+            backendMsg ||
+              'Thanh toán thành công! Vé của bạn sẽ được cập nhật trong hệ thống.',
           );
         } else {
           setStatus('fail');
           setMessage(
-            data?.result ||
-              data?.message ||
-              'Thanh toán không thành công hoặc đã bị huỷ.',
+            backendMsg ||
+              'Thanh toán không thành công hoặc đã bị hủy. Vui lòng thử lại.',
           );
         }
       } catch (err: any) {
@@ -92,29 +96,66 @@ export default function PaymentResultPage() {
   const isSuccess = status === 'success';
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-xl w-full bg-slate-800/80 border border-slate-700 rounded-3xl px-6 py-7 md:px-8 md:py-9 text-center space-y-5">
-        <h1 className="text-2xl md:text-3xl font-bold">
-          {status === 'pending'
-            ? 'Đang xử lý thanh toán...'
-            : isSuccess
-            ? 'Thanh toán thành công'
-            : 'Thanh toán thất bại'}
-        </h1>
+    <main className="min-h-[70vh] bg-slate-50 flex items-center justify-center px-4 py-10">
+      <div className="max-w-xl w-full bg-white border border-gray-100 rounded-3xl shadow-md px-6 py-7 md:px-8 md:py-9 text-center space-y-5">
+        {/* ICON & TITLE */}
+        <div className="flex flex-col items-center gap-3">
+          {status === 'loading' ? (
+            <>
+              <div className="w-14 h-14 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+              <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
+                Đang xác nhận thanh toán...
+              </h1>
+            </>
+          ) : isSuccess ? (
+            <>
+              <CheckCircle2 className="w-16 h-16 text-emerald-500" />
+              <h1 className="text-xl md:text-2xl font-semibold text-emerald-600">
+                Thanh toán thành công
+              </h1>
+            </>
+          ) : (
+            <>
+              <XCircle className="w-16 h-16 text-red-500" />
+              <h1 className="text-xl md:text-2xl font-semibold text-red-600">
+                Thanh toán không thành công
+              </h1>
+            </>
+          )}
+        </div>
 
-        <p className="text-sm md:text-base text-slate-200">{message}</p>
+        {/* MESSAGE */}
+        <p className="text-sm md:text-base text-gray-700 leading-relaxed">
+          {message ||
+            (status === 'loading'
+              ? 'Vui lòng chờ trong giây lát...'
+              : isSuccess
+              ? 'Thanh toán của bạn đã được ghi nhận.'
+              : 'Đơn hàng chưa được thanh toán.')}
+        </p>
 
-        {status !== 'pending' && (
-          <div className="space-x-3 mt-4">
+        {/* INFO */}
+        {txnRef && (
+          <div className="inline-flex flex-col items-center px-4 py-2 rounded-2xl bg-slate-50 border border-gray-200 text-xs md:text-sm text-gray-700">
+            <span className="font-medium">Mã giao dịch (TxnRef)</span>
+            <span className="mt-1 font-mono text-[13px] break-all">
+              {txnRef}
+            </span>
+          </div>
+        )}
+
+        {/* BUTTONS */}
+        {status !== 'loading' && (
+          <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
             <Link
-              href="/"
-              className="inline-block px-5 py-2.5 rounded-full bg-rose-600 text-white text-sm md:text-base font-semibold hover:bg-rose-700"
+              href="/home"
+              className="inline-block px-5 py-2.5 rounded-full bg-blue-600 text-white text-sm md:text-base font-semibold hover:bg-blue-700 shadow-sm"
             >
               Về trang chủ
             </Link>
             <Link
               href="/cinemas"
-              className="inline-block px-5 py-2.5 rounded-full border border-slate-600 text-sm md:text-base text-slate-100 hover:bg-slate-700"
+              className="inline-block px-5 py-2.5 rounded-full border border-gray-300 text-sm md:text-base text-gray-800 hover:bg-gray-100"
             >
               Đặt vé khác
             </Link>
