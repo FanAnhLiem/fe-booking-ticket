@@ -15,7 +15,7 @@ interface ApiResponse<T> {
 
 interface ShowTimeSummary {
   showTimeId: number;
-  startTime: string;
+  startTime: string; // HH:mm:ss
   endTime: string;
 }
 
@@ -40,6 +40,7 @@ type DateItem = {
 const buildDateList = (days = 14): DateItem[] => {
   const result: DateItem[] = [];
   const today = new Date();
+
   for (let i = 0; i < days; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
@@ -50,18 +51,13 @@ const buildDateList = (days = 14): DateItem[] => {
     const weekday = weekdayNames[d.getDay()];
     const key = `${d.getFullYear()}-${month}-${day}`;
 
-    result.push({
-      key,
-      date: d,
-      day,
-      month,
-      weekday,
-    });
+    result.push({ key, date: d, day, month, weekday });
   }
+
   return result;
 };
 
-// format đúng pattern của BE: dd/MM/yyyy
+// dd/MM/yyyy cho BE
 const formatApiDate = (date: Date): string => {
   const day = date.getDate().toString().padStart(2, '0');
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -71,8 +67,7 @@ const formatApiDate = (date: Date): string => {
 
 const formatTime = (time: string | null | undefined) => {
   if (!time) return '';
-  // 'HH:mm:ss' -> 'HH:mm'
-  return time.slice(0, 5);
+  return time.slice(0, 5); // HH:mm:ss -> HH:mm
 };
 
 export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
@@ -81,7 +76,6 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
   const dates = useMemo(() => buildDateList(14), []);
   const [selectedDateKey, setSelectedDateKey] = useState<string>(dates[0]?.key);
 
-  // ngày đang chọn (mặc định chính là HÔM NAY)
   const selectedDate = useMemo(
     () => dates.find((d) => d.key === selectedDateKey) ?? dates[0],
     [dates, selectedDateKey],
@@ -95,7 +89,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
   const [loadingShowtime, setLoadingShowtime] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ====== CALL API 1: /movie/address (movie_id + date) ======
+  // ====== 1. Lấy danh sách khu vực theo phim + ngày ======
   useEffect(() => {
     let cancelled = false;
 
@@ -104,18 +98,17 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
       setError(null);
       setAddresses([]);
       setSelectedAddress(null);
+      setShowtimes([]); // đổi ngày thì reset showtime
 
       try {
         const body = {
           movie_id: movieId,
-          date: formatApiDate(selectedDate.date), // <== đúng FilterMovie
+          date: formatApiDate(selectedDate.date),
         };
 
         const res = await fetch(MOVIE_ADDRESS_API, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
 
@@ -128,8 +121,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
         if (!cancelled) {
           const list = data.result || [];
           setAddresses(list);
-          // mặc định chọn address đầu tiên
-          setSelectedAddress(list[0] ?? null);
+          setSelectedAddress(list[0] ?? null); // auto chọn khu vực đầu tiên
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -139,9 +131,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
           setSelectedAddress(null);
         }
       } finally {
-        if (!cancelled) {
-          setLoadingAddress(false);
-        }
+        if (!cancelled) setLoadingAddress(false);
       }
     };
 
@@ -150,9 +140,9 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
     return () => {
       cancelled = true;
     };
-  }, [movieId, selectedDate]);
+  }, [movieId, selectedDateKey]); // đổi ngày -> gọi lại
 
-  // ====== CALL API 2: /showtime/movie (movie_id + date + address) ======
+  // ====== 2. Lấy danh sách suất chiếu theo phim + ngày + khu vực ======
   useEffect(() => {
     let cancelled = false;
 
@@ -174,9 +164,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
 
         const res = await fetch(SHOWTIME_MOVIE_API, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
 
@@ -196,9 +184,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
           setShowtimes([]);
         }
       } finally {
-        if (!cancelled) {
-          setLoadingShowtime(false);
-        }
+        if (!cancelled) setLoadingShowtime(false);
       }
     };
 
@@ -207,12 +193,12 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
     return () => {
       cancelled = true;
     };
-  }, [movieId, selectedAddress, selectedDate]);
+  }, [movieId, selectedAddress, selectedDateKey]); // đổi ngày / khu vực -> gọi lại
 
   return (
     <div className="mt-8 mb-12">
       <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 p-4 md:p-6 lg:p-8">
-        {/* ===== HÀNG CHỌN NGÀY ===== */}
+        {/* ===== CHỌN NGÀY ===== */}
         <div className="mb-6">
           <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-3">
             Chọn ngày chiếu
@@ -242,7 +228,7 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
           </div>
         </div>
 
-        {/* ===== HÀNG CHỌN KHU VỰC (address) ===== */}
+        {/* ===== CHỌN KHU VỰC ===== */}
         <div className="mb-6">
           <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-3">
             Chọn khu vực
@@ -308,10 +294,8 @@ export default function BookingShowtime({ movieId }: BookingShowtimeProps) {
                         key={s.showTimeId}
                         type="button"
                         className="px-5 py-2.5 rounded-xl border border-gray-200 bg-slate-50 text-base md:text-lg font-medium text-gray-800 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-all"
-                        onClick={() => {
-                          // Điều hướng sang trang chọn ghế cho suất chiếu này
-                          router.push(`/booking-seat/${s.showTimeId}`);
-                        }}
+                        // điều hướng sang trang chọn ghế cho suất chiếu này
+                        onClick={() => router.push(`/booking-seat/${s.showTimeId}`)}
                       >
                         {formatTime(s.startTime)}
                       </button>

@@ -1,11 +1,12 @@
 import BookingShowtime from '@/components/booking/BookingShowtime';
 
-export default function BookingPage({
+export default async function BookingPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const movieId = Number(params.id);
+  const { id } = await params;   // ✅ Bắt buộc phải await
+  const movieId = Number(id);
 
   return (
     <div className="mt-6">
